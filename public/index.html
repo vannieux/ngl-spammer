@@ -200,7 +200,7 @@
       </div>
       <div class="form-group">
         <label for="delay">Delay (ms):</label>
-        <input type="number" id="delay" value="1500" min="200" step="100">
+        <input type="number" id="delay" value="500" min="0" step="50">
       </div>
     </div>
 
@@ -236,13 +236,6 @@
   <script>
     let isRunning = false;
 
-    function generateUUID() {
-      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-      });
-    }
-
     function parseUsername(input) {
       let trimmed = input.trim();
       if (!trimmed) return null;
@@ -276,7 +269,7 @@
     document.getElementById('stopBtn').addEventListener('click', () => {
       if (isRunning) {
         isRunning = false;
-        appendLog('Stopping operation... Finishing current request...', 'error');
+        appendLog('Stopping operation...', 'error');
       }
     });
 
@@ -318,7 +311,7 @@
       stopBtn.disabled = false;
 
       appendLog(`Parsed target username: "${username}"`, 'info');
-      appendLog(`Starting operation... Total: ${count}`, 'info');
+      appendLog(`Starting operation... Target: ${username} | Total: ${count}`, 'info');
 
       for (let i = 1; i <= count; i++) {
         if (!isRunning) {
@@ -334,8 +327,7 @@
             },
             body: JSON.stringify({
               username: username,
-              question: message,
-              deviceId: generateUUID()
+              question: message
             })
           });
 
@@ -345,7 +337,7 @@
           if (response.ok) {
             successCount++;
             elSuccess.textContent = successCount;
-            appendLog(`[${i}/${count}] 200 OK - Message sent to ${username}.`);
+            appendLog(`[${i}/${count}] 200 OK - Message dispatched.`);
           } else {
             failCount++;
             elFailed.textContent = failCount;
@@ -353,7 +345,7 @@
             if (response.status === 403 || response.status === 429) {
               err403Count++;
               el403.textContent = err403Count;
-              appendLog(`[${i}/${count}] Status ${response.status} - Rate Limit / Block.`, 'error');
+              appendLog(`[${i}/${count}] Status ${response.status} - Blocked / Rate Limit.`, 'error');
             } else {
               appendLog(`[${i}/${count}] Error ${response.status}`, 'error');
             }
@@ -367,12 +359,12 @@
           appendLog(`[${i}/${count}] Network error connecting to proxy.`, 'error');
         }
 
-        if (i < count && isRunning) {
+        if (i < count && isRunning && delay > 0) {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
 
-      appendLog(`Process ended. Sent: ${sentCount} | Success: ${successCount} | Failed: ${failCount}`, 'info');
+      appendLog(`Process finished. Sent: ${sentCount} | Success: ${successCount} | Failed: ${failCount}`, 'info');
       isRunning = false;
       submitBtn.disabled = false;
       stopBtn.disabled = true;

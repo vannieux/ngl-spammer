@@ -12,41 +12,42 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { username, question, deviceId } = req.body;
+    const { username, question } = req.body;
 
     if (!username) {
       return res.status(400).json({ error: 'Username is required.' });
     }
 
-    // Appends a unique hash to prevent duplicate-message shadow blocking
-    const randomHash = Math.random().toString(36).substring(2, 7);
-    const uniqueQuestion = `${question} [${randomHash}]`;
-
+    // Matches Python script payload
     const payload = new URLSearchParams({
       username: username,
-      question: uniqueQuestion,
-      deviceId: deviceId || 'ff89eecc-15e6-4557-8a8e-51eac1b5f29f',
+      question: question || '',
+      deviceId: '0', // Python script uses static '0'
       gameSlug: '',
       referrer: ''
     });
 
-    // Rotate User-Agent strings
-    const userAgents = [
-      'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1',
-      'Mozilla/5.0 (Linux; Android 13; SM-S901B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Mobile Safari/537.36',
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36'
-    ];
-    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+    // Exact headers from the Python script
+    const headers = {
+      'Host': 'ngl.link',
+      'sec-ch-ua': '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
+      'accept': '*/*',
+      'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'x-requested-with': 'XMLHttpRequest',
+      'sec-ch-ua-mobile': '?0',
+      'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
+      'sec-ch-ua-platform': '"Windows"',
+      'origin': 'https://ngl.link',
+      'sec-fetch-site': 'same-origin',
+      'sec-fetch-mode': 'cors',
+      'sec-fetch-dest': 'empty',
+      'referer': `https://ngl.link/${username}`,
+      'accept-language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
+    };
 
     const nglResponse = await fetch('https://ngl.link/api/submit', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-        'Accept': '*/*',
-        'X-Requested-With': 'XMLHttpRequest',
-        'User-Agent': randomUA
-      },
+      headers: headers,
       body: payload
     });
 

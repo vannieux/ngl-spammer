@@ -10,6 +10,8 @@
       --card-bg: #ffffff;
       --accent: #e0245e;
       --accent-hover: #c01d4e;
+      --danger: #d9534f;
+      --danger-hover: #c9302c;
       --text: #1d2129;
       --border: #e1e4e8;
     }
@@ -82,26 +84,42 @@
       flex: 1;
     }
 
+    .btn-group {
+      display: flex;
+      gap: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
     button {
-      width: 100%;
+      flex: 1;
       padding: 0.85rem;
       font-size: 1rem;
       font-weight: bold;
       cursor: pointer;
-      background-color: var(--accent);
       color: white;
       border: none;
       border-radius: 6px;
       transition: background-color 0.2s;
-      margin-top: 0.5rem;
     }
 
-    button:hover {
+    #submitBtn {
+      background-color: var(--accent);
+    }
+
+    #submitBtn:hover {
       background-color: var(--accent-hover);
     }
 
+    #stopBtn {
+      background-color: var(--danger);
+    }
+
+    #stopBtn:hover {
+      background-color: var(--danger-hover);
+    }
+
     button:disabled {
-      background-color: #ccc;
+      background-color: #ccc !important;
       cursor: not-allowed;
     }
 
@@ -182,11 +200,14 @@
       </div>
       <div class="form-group">
         <label for="delay">Delay (ms):</label>
-        <input type="number" id="delay" value="200" min="50" step="50">
+        <input type="number" id="delay" value="1500" min="200" step="100">
       </div>
     </div>
 
-    <button id="submitBtn">Start Sending</button>
+    <div class="btn-group">
+      <button id="submitBtn">Start Sending</button>
+      <button id="stopBtn" disabled>Stop</button>
+    </div>
 
     <div class="stats-grid">
       <div class="stat-card">
@@ -213,6 +234,8 @@
   </div>
 
   <script>
+    let isRunning = false;
+
     function generateUUID() {
       return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
         const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
@@ -250,8 +273,16 @@
       consoleEl.scrollTop = consoleEl.scrollHeight;
     }
 
+    document.getElementById('stopBtn').addEventListener('click', () => {
+      if (isRunning) {
+        isRunning = false;
+        appendLog('Stopping operation... Finishing current request...', 'error');
+      }
+    });
+
     document.getElementById('submitBtn').addEventListener('click', async () => {
       const submitBtn = document.getElementById('submitBtn');
+      const stopBtn = document.getElementById('stopBtn');
       const rawInput = document.getElementById('targetUrl').value;
       const username = parseUsername(rawInput);
       const message = document.getElementById('message').value;
@@ -282,13 +313,20 @@
       elFailed.textContent = '0';
       el403.textContent = '0';
 
+      isRunning = true;
       submitBtn.disabled = true;
+      stopBtn.disabled = false;
+
       appendLog(`Parsed target username: "${username}"`, 'info');
-      appendLog(`Starting operation via Vercel proxy... Total: ${count}`, 'info');
+      appendLog(`Starting operation... Total: ${count}`, 'info');
 
       for (let i = 1; i <= count; i++) {
+        if (!isRunning) {
+          appendLog('Operation stopped by user.', 'error');
+          break;
+        }
+
         try {
-          // Hits the local Vercel serverless proxy endpoint
           const response = await fetch('/api/submit', {
             method: 'POST',
             headers: {
@@ -315,7 +353,7 @@
             if (response.status === 403 || response.status === 429) {
               err403Count++;
               el403.textContent = err403Count;
-              appendLog(`[${i}/${count}] Status ${response.status} - NGL Rate Limit or Block hit.`, 'error');
+              appendLog(`[${i}/${count}] Status ${response.status} - Rate Limit / Block.`, 'error');
             } else {
               appendLog(`[${i}/${count}] Error ${response.status}`, 'error');
             }
@@ -326,16 +364,18 @@
           elSent.textContent = sentCount;
           elFailed.textContent = failCount;
 
-          appendLog(`[${i}/${count}] Network error connecting to Vercel backend.`, 'error');
+          appendLog(`[${i}/${count}] Network error connecting to proxy.`, 'error');
         }
 
-        if (i < count) {
+        if (i < count && isRunning) {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
 
-      appendLog(`Task completed. Total: ${sentCount} | Success: ${successCount} | Failed: ${failCount}`, 'info');
+      appendLog(`Process ended. Sent: ${sentCount} | Success: ${successCount} | Failed: ${failCount}`, 'info');
+      isRunning = false;
       submitBtn.disabled = false;
+      stopBtn.disabled = true;
     });
   </script>
 

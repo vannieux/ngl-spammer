@@ -12,6 +12,8 @@
       --accent-hover: #c01d4e;
       --danger: #d9534f;
       --danger-hover: #c9302c;
+      --ultra: #ff003c;
+      --ultra-hover: #cc0030;
       --text: #1d2129;
       --border: #e1e4e8;
     }
@@ -86,8 +88,14 @@
 
     .btn-group {
       display: flex;
+      flex-direction: column;
       gap: 0.75rem;
       margin-top: 0.5rem;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 0.75rem;
     }
 
     button {
@@ -99,7 +107,11 @@
       color: white;
       border: none;
       border-radius: 6px;
-      transition: background-color 0.2s;
+      transition: background-color 0.2s, transform 0.1s;
+    }
+
+    button:active {
+      transform: scale(0.98);
     }
 
     #submitBtn {
@@ -118,9 +130,37 @@
       background-color: var(--danger-hover);
     }
 
+    /* Ultra Red Button Styles */
+    #ultraBtn {
+      background-color: var(--ultra);
+      box-shadow: 0 0 12px rgba(255, 0, 60, 0.4);
+      font-size: 1.1rem;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    #ultraBtn:hover {
+      background-color: var(--ultra-hover);
+      box-shadow: 0 0 18px rgba(255, 0, 60, 0.6);
+    }
+
+    #ultraBtn.active {
+      background-color: #111;
+      color: #ff003c;
+      border: 2px solid #ff003c;
+      animation: pulse 0.8s infinite alternate;
+    }
+
+    @keyframes pulse {
+      from { box-shadow: 0 0 8px rgba(255, 0, 60, 0.5); }
+      to { box-shadow: 0 0 20px rgba(255, 0, 60, 1); }
+    }
+
     button:disabled {
       background-color: #ccc !important;
+      box-shadow: none !important;
       cursor: not-allowed;
+      animation: none !important;
     }
 
     .stats-grid {
@@ -176,6 +216,11 @@
     .log-entry.info {
       color: #55ffff;
     }
+
+    .log-entry.ultra {
+      color: #ff003c;
+      font-weight: bold;
+    }
   </style>
 </head>
 <body>
@@ -205,8 +250,11 @@
     </div>
 
     <div class="btn-group">
-      <button id="submitBtn">Start Sending</button>
-      <button id="stopBtn" disabled>Stop</button>
+      <div class="btn-row">
+        <button id="submitBtn">Start Sending</button>
+        <button id="stopBtn" disabled>Stop</button>
+      </div>
+      <button id="ultraBtn">⚡ ULTRA MODE (NONSTOP) ⚡</button>
     </div>
 
     <div class="stats-grid">
@@ -229,12 +277,19 @@
     </div>
 
     <div class="log-container" id="logConsole">
-      <div class="log-entry info">System ready. Paste link and click Start.</div>
+      <div class="log-entry info">System ready. Paste link and click Start or Ultra.</div>
     </div>
   </div>
 
   <script>
     let isRunning = false;
+    let isUltraMode = false;
+
+    // Stat counters
+    let sentCount = 0;
+    let successCount = 0;
+    let failCount = 0;
+    let err403Count = 0;
 
     function parseUsername(input) {
       let trimmed = input.trim();
@@ -266,108 +321,147 @@
       consoleEl.scrollTop = consoleEl.scrollHeight;
     }
 
-    document.getElementById('stopBtn').addEventListener('click', () => {
-      if (isRunning) {
-        isRunning = false;
-        appendLog('Stopping operation...', 'error');
-      }
-    });
+    function resetStats() {
+      sentCount = 0;
+      successCount = 0;
+      failCount = 0;
+      err403Count = 0;
 
+      document.getElementById('statSent').textContent = '0';
+      document.getElementById('statSuccess').textContent = '0';
+      document.getElementById('statFailed').textContent = '0';
+      document.getElementById('stat403').textContent = '0';
+    }
+
+    function updateStatsUI() {
+      document.getElementById('statSent').textContent = sentCount;
+      document.getElementById('statSuccess').textContent = successCount;
+      document.getElementById('statFailed').textContent = failCount;
+      document.getElementById('stat403').textContent = err403Count;
+    }
+
+    // Single HTTP Worker for high-velocity dispatching
+    async function dispatchRequest(username, message, index, total) {
+      if (!isRunning) return;
+
+      try {
+        const response = await fetch('/api/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, question: message })
+        });
+
+        sentCount++;
+
+        if (response.ok) {
+          successCount++;
+          if (!isUltraMode || sentCount % 5 === 0) {
+            appendLog(`[${sentCount}] 200 OK - Sent to ${username}.`);
+          }
+        } else {
+          failCount++;
+          if (response.status === 403 || response.status === 429) {
+            err403Count++;
+            appendLog(`[${sentCount}] Status ${response.status} - Block/Rate Limit.`, 'error');
+          } else {
+            appendLog(`[${sentCount}] Status Error ${response.status}`, 'error');
+          }
+        }
+      } catch (err) {
+        sentCount++;
+        failCount++;
+        appendLog(`[${sentCount}] Network proxy error.`, 'error');
+      }
+
+      updateStatsUI();
+    }
+
+    // Standard loop execution
     document.getElementById('submitBtn').addEventListener('click', async () => {
       const submitBtn = document.getElementById('submitBtn');
       const stopBtn = document.getElementById('stopBtn');
-      const rawInput = document.getElementById('targetUrl').value;
-      const username = parseUsername(rawInput);
+      const ultraBtn = document.getElementById('ultraBtn');
+      
+      const username = parseUsername(document.getElementById('targetUrl').value);
       const message = document.getElementById('message').value;
       const count = parseInt(document.getElementById('count').value, 10);
       const delay = parseInt(document.getElementById('delay').value, 10);
 
-      const elSent = document.getElementById('statSent');
-      const elSuccess = document.getElementById('statSuccess');
-      const elFailed = document.getElementById('statFailed');
-      const el403 = document.getElementById('stat403');
+      if (!username) return alert('Invalid NGL link or username.');
+      if (isNaN(count) || count < 1 || count > 500) return alert('Enter count between 1 and 500.');
 
-      if (!username) {
-        alert('Invalid NGL link or username provided.');
-        return;
-      }
-      if (isNaN(count) || count < 1 || count > 500) {
-        alert('Please enter a valid count between 1 and 500.');
-        return;
-      }
-
-      let sentCount = 0;
-      let successCount = 0;
-      let failCount = 0;
-      let err403Count = 0;
-
-      elSent.textContent = '0';
-      elSuccess.textContent = '0';
-      elFailed.textContent = '0';
-      el403.textContent = '0';
-
+      resetStats();
       isRunning = true;
+      isUltraMode = false;
+
       submitBtn.disabled = true;
+      ultraBtn.disabled = true;
       stopBtn.disabled = false;
 
-      appendLog(`Parsed target username: "${username}"`, 'info');
-      appendLog(`Starting operation... Target: ${username} | Total: ${count}`, 'info');
+      appendLog(`Starting standard send... Target: ${username} | Total: ${count}`, 'info');
 
       for (let i = 1; i <= count; i++) {
-        if (!isRunning) {
-          appendLog('Operation stopped by user.', 'error');
-          break;
-        }
-
-        try {
-          const response = await fetch('/api/submit', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              username: username,
-              question: message
-            })
-          });
-
-          sentCount++;
-          elSent.textContent = sentCount;
-
-          if (response.ok) {
-            successCount++;
-            elSuccess.textContent = successCount;
-            appendLog(`[${i}/${count}] 200 OK - Message dispatched.`);
-          } else {
-            failCount++;
-            elFailed.textContent = failCount;
-
-            if (response.status === 403 || response.status === 429) {
-              err403Count++;
-              el403.textContent = err403Count;
-              appendLog(`[${i}/${count}] Status ${response.status} - Blocked / Rate Limit.`, 'error');
-            } else {
-              appendLog(`[${i}/${count}] Error ${response.status}`, 'error');
-            }
-          }
-        } catch (err) {
-          sentCount++;
-          failCount++;
-          elSent.textContent = sentCount;
-          elFailed.textContent = failCount;
-
-          appendLog(`[${i}/${count}] Network error connecting to proxy.`, 'error');
-        }
-
+        if (!isRunning) break;
+        await dispatchRequest(username, message, i, count);
         if (i < count && isRunning && delay > 0) {
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise(r => setTimeout(r, delay));
         }
       }
 
-      appendLog(`Process finished. Sent: ${sentCount} | Success: ${successCount} | Failed: ${failCount}`, 'info');
+      appendLog(`Operation ended. Total: ${sentCount} | Success: ${successCount}`, 'info');
       isRunning = false;
       submitBtn.disabled = false;
+      ultraBtn.disabled = false;
       stopBtn.disabled = true;
+    });
+
+    // ULTRA MODE (Non-stop / Maximum Velocity)
+    document.getElementById('ultraBtn').addEventListener('click', async () => {
+      const ultraBtn = document.getElementById('ultraBtn');
+      const submitBtn = document.getElementById('submitBtn');
+      const stopBtn = document.getElementById('stopBtn');
+
+      // If already running Ultra, turn it OFF
+      if (isRunning && isUltraMode) {
+        isRunning = false;
+        isUltraMode = false;
+        ultraBtn.classList.remove('active');
+        ultraBtn.textContent = '⚡ ULTRA MODE (NONSTOP) ⚡';
+        appendLog('ULTRA MODE STOPPED.', 'error');
+        submitBtn.disabled = false;
+        stopBtn.disabled = true;
+        return;
+      }
+
+      const username = parseUsername(document.getElementById('targetUrl').value);
+      const message = document.getElementById('message').value;
+
+      if (!username) return alert('Invalid NGL link or username.');
+
+      resetStats();
+      isRunning = true;
+      isUltraMode = true;
+
+      submitBtn.disabled = true;
+      stopBtn.disabled = true; // Ultra button itself controls Stop toggle
+      ultraBtn.classList.add('active');
+      ultraBtn.textContent = '⏹ STOP ULTRA MODE';
+
+      appendLog(`🔥 ULTRA MODE ACTIVATED 🔥 Target: ${username}`, 'ultra');
+
+      // Infinite concurrent dispatch loop using zero-delay tick
+      while (isRunning) {
+        dispatchRequest(username, message);
+        // Small 1ms yields thread control to browser event loop to prevent window freezing
+        await new Promise(r => setTimeout(r, 1));
+      }
+    });
+
+    document.getElementById('stopBtn').addEventListener('click', () => {
+      if (isRunning) {
+        isRunning = false;
+        appendLog('Stopping process...', 'error');
+      }
     });
   </script>
 

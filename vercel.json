@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/submit",
+      "destination": "/api/submit.js"
+    }
+  ]
+}

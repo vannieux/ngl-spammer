@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NGL Message Sender</title>
+  <style>
+    :root {
+      --bg-color: #f4f5f7;
+      --card-bg: #ffffff;
+      --accent: #e0245e;
+      --accent-hover: #c01d4e;
+      --text: #1d2129;
+      --border: #e1e4e8;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      max-width: 550px;
+      margin: 3rem auto;
+      padding: 0 1rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--border);
+    }
+
+    h2 {
+      margin-top: 0;
+      margin-bottom: 1.5rem;
+      color: var(--accent);
+      text-align: center;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    textarea {
+      width: 100%;
+      padding: 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    textarea:focus {
+      border-color: var(--accent);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 90px;
+    }
+
+    .row {
+      display: flex;
+      gap: 1rem;
+    }
+
+    .row .form-group {
+      flex: 1;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.85rem;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      background-color: var(--accent);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      transition: background-color 0.2s;
+      margin-top: 0.5rem;
+    }
+
+    button:hover {
+      background-color: var(--accent-hover);
+    }
+
+    button:disabled {
+      background-color: #ccc;
+      cursor: not-allowed;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.5rem;
+      margin-top: 1.5rem;
+      text-align: center;
+    }
+
+    .stat-card {
+      background: #f8f9fa;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.5rem;
+    }
+
+    .stat-card .val {
+      font-size: 1.2rem;
+      font-weight: bold;
+    }
+
+    .stat-card .lbl {
+      font-size: 0.75rem;
+      color: #666;
+    }
+
+    .stat-card.success .val { color: #28a745; }
+    .stat-card.failed .val { color: #dc3545; }
+    .stat-card.err403 .val { color: #fd7e14; }
+
+    .log-container {
+      margin-top: 1rem;
+      background-color: #1e1e1e;
+      color: #00ff66;
+      font-family: monospace;
+      padding: 1rem;
+      border-radius: 6px;
+      height: 180px;
+      overflow-y: auto;
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+
+    .log-entry {
+      margin-bottom: 0.25rem;
+    }
+
+    .log-entry.error {
+      color: #ff5555;
+    }
+
+    .log-entry.info {
+      color: #55ffff;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>NGL Submitter</h2>
+
+    <div class="form-group">
+      <label for="targetUrl">Target NGL Link or Username:</label>
+      <input type="text" id="targetUrl" value="https://ngl.link/yuhoo17373" placeholder="https://ngl.link/username or username">
+    </div>
+
+    <div class="form-group">
+      <label for="message">Message Content:</label>
+      <textarea id="message" placeholder="Type your message here...">hi</textarea>
+    </div>
+
+    <div class="row">
+      <div class="form-group">
+        <label for="count">Quantity (Max 500):</label>
+        <input type="number" id="count" value="1" min="1" max="500">
+      </div>
+      <div class="form-group">
+        <label for="delay">Delay (ms):</label>
+        <input type="number" id="delay" value="200" min="50" step="50">
+      </div>
+    </div>
+
+    <button id="submitBtn">Start Sending</button>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="val" id="statSent">0</div>
+        <div class="lbl">Sent</div>
+      </div>
+      <div class="stat-card success">
+        <div class="val" id="statSuccess">0</div>
+        <div class="lbl">Success</div>
+      </div>
+      <div class="stat-card failed">
+        <div class="val" id="statFailed">0</div>
+        <div class="lbl">Failed</div>
+      </div>
+      <div class="stat-card err403">
+        <div class="val" id="stat403">0</div>
+        <div class="lbl">Rate Limited</div>
+      </div>
+    </div>
+
+    <div class="log-container" id="logConsole">
+      <div class="log-entry info">System ready. Paste link and click Start.</div>
+    </div>
+  </div>
+
+  <script>
+    function generateUUID() {
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    }
+
+    function parseUsername(input) {
+      let trimmed = input.trim();
+      if (!trimmed) return null;
+
+      if (trimmed.includes('ngl.link/')) {
+        try {
+          if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+            trimmed = 'https://' + trimmed;
+          }
+          const urlObj = new URL(trimmed);
+          const pathSegments = urlObj.pathname.split('/').filter(Boolean);
+          return pathSegments[0] || null;
+        } catch (e) {
+          const match = trimmed.match(/ngl\.link\/([^/?#]+)/);
+          return match ? match[1] : null;
+        }
+      }
+
+      return trimmed.replace(/^@/, '');
+    }
+
+    function appendLog(text, type = '') {
+      const consoleEl = document.getElementById('logConsole');
+      const entry = document.createElement('div');
+      entry.className = `log-entry ${type}`;
+      entry.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+      consoleEl.appendChild(entry);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    document.getElementById('submitBtn').addEventListener('click', async () => {
+      const submitBtn = document.getElementById('submitBtn');
+      const rawInput = document.getElementById('targetUrl').value;
+      const username = parseUsername(rawInput);
+      const message = document.getElementById('message').value;
+      const count = parseInt(document.getElementById('count').value, 10);
+      const delay = parseInt(document.getElementById('delay').value, 10);
+
+      const elSent = document.getElementById('statSent');
+      const elSuccess = document.getElementById('statSuccess');
+      const elFailed = document.getElementById('statFailed');
+      const el403 = document.getElementById('stat403');
+
+      if (!username) {
+        alert('Invalid NGL link or username provided.');
+        return;
+      }
+      if (isNaN(count) || count < 1 || count > 500) {
+        alert('Please enter a valid count between 1 and 500.');
+        return;
+      }
+
+      let sentCount = 0;
+      let successCount = 0;
+      let failCount = 0;
+      let err403Count = 0;
+
+      elSent.textContent = '0';
+      elSuccess.textContent = '0';
+      elFailed.textContent = '0';
+      el403.textContent = '0';
+
+      submitBtn.disabled = true;
+      appendLog(`Parsed target username: "${username}"`, 'info');
+      appendLog(`Starting operation via Vercel proxy... Total: ${count}`, 'info');
+
+      for (let i = 1; i <= count; i++) {
+        try {
+          // Hits the local Vercel serverless proxy endpoint
+          const response = await fetch('/api/submit', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              username: username,
+              question: message,
+              deviceId: generateUUID()
+            })
+          });
+
+          sentCount++;
+          elSent.textContent = sentCount;
+
+          if (response.ok) {
+            successCount++;
+            elSuccess.textContent = successCount;
+            appendLog(`[${i}/${count}] 200 OK - Message sent to ${username}.`);
+          } else {
+            failCount++;
+            elFailed.textContent = failCount;
+
+            if (response.status === 403 || response.status === 429) {
+              err403Count++;
+              el403.textContent = err403Count;
+              appendLog(`[${i}/${count}] Status ${response.status} - NGL Rate Limit or Block hit.`, 'error');
+            } else {
+              appendLog(`[${i}/${count}] Error ${response.status}`, 'error');
+            }
+          }
+        } catch (err) {
+          sentCount++;
+          failCount++;
+          elSent.textContent = sentCount;
+          elFailed.textContent = failCount;
+
+          appendLog(`[${i}/${count}] Network error connecting to Vercel backend.`, 'error');
+        }
+
+        if (i < count) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+
+      appendLog(`Task completed. Total: ${sentCount} | Success: ${successCount} | Failed: ${failCount}`, 'info');
+      submitBtn.disabled = false;
+    });
+  </script>
+
+</body>
+</html>
